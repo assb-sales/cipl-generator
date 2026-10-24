@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Commercial Invoice / Packing List</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- 引入 pdf-lib 用于完美合并 PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  /* 页面整体缩放调整 */
+  body { font-family: Arial, Helvetica, sans-serif; background:#eef1f5; margin:0; padding:15px; color:#222; font-size: 13px; }
+  .app { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 18px; margin-bottom: 15px; }
+  .panel { background:#fff; padding:15px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,.1); margin-bottom:20px; }
+  label { font-size:11px; color:#666; display:block; margin-top:6px; }
+  input { width:100%; padding:6px; border:1px solid #ccc; border-radius:4px; font-size:12px; margin-top:2px; }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  .item-header, .item-row {
+    display:grid;
+    grid-template-columns: 1fr 1.6fr 1fr 1fr 1fr 1.2fr;
+    gap:5px; align-items:center;
+  }
+  .item-header { font-size:11px; color:#888; margin:10px 0 4px; }
+  .item-row { margin-bottom:5px; }
+  .item-row input { margin:0; }
+  button { padding:8px 15px; border:none; border-radius:4px; background:#1a3d6d; color:#fff;
+    font-size:13px; cursor:pointer; margin-right:8px; margin-top:15px; }
+  button:hover { background:#14304f; }
+  .btn-add { background:#4a7c59; margin-top:6px; padding:6px 12px; font-size:12px; }
+
+  /* ===== 打印文档样式 ===== */
+  .doc {
+    background:#fff; 
+    width:210mm; 
+    height: 296.8mm; /* 强制比 A4 稍微矮 0.2mm，彻底杜绝溢出产生空白页 */
+    padding:14mm;
+    margin:0 auto; 
+    font-size:11px; 
+    color:#000; 
+    position:relative; 
+    overflow: hidden; /* 隐藏所有超出的像素 */
+  }
+  .doc.hidden { display:none; }
+
+  /* 抬头（黑色） */
+  .letterhead { display:flex; align-items:center; gap:14px; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:12px; }
+  .letterhead .lh-text { flex:1; }
+  .letterhead .lh-name { font-size:16px; font-weight:bold; color:#000; margin-bottom: 2px; }
+  .letterhead .lh-company-no { font-size:11.5px; color:#000; font-weight:bold; }
+
+  .top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+  .issuer-label { font-weight:bold; text-decoration:underline; }
+  .issuer-name { font-weight:bold; margin-top:2px; }
+  .title-box { text-align:center; }
+  .doc-title { font-size:16px; font-weight:bold; letter-spacing:1px; }
+  .meta-line { margin:2px 0; }
+  .meta-line .k { font-weight:bold; }
+  .to-block { margin:10px 0; }
+  .grid-meta { display:grid; grid-template-columns: 1fr 1fr; gap:2px 30px; margin:6px 0; }
+  .transport { margin:6px 0 10px; }
+  
+  /* 表格（黑色） */
+  table { width:100%; border-collapse:collapse; margin-top:6px; }
+  th, td { border:1px solid #000; padding:5px; font-size:10.5px; vertical-align:top; }
+  th { background:#e8e8e8; color:#000; text-align:center; font-weight:bold; }
+  .center { text-align:center; }
+  .right { text-align:right; }
+  .total-row { font-weight:bold; background:#f2f2f2; }
+  .say { margin-top:10px; font-weight:bold; font-size:10.5px; }
+  .terms { margin-top:8px; font-size:10.5px; }
+  .cbm-block { margin-top:14px; font-size:10.5px; }
+  .cbm-block div { margin:3px 0; }
+  .cbm-block .k { display:inline-block; width:180px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Commercial Invoice / Packing List</h1>
+
+  <!-- ================= 表单 ================= -->
+  <div class="panel">
+    <div class="row">
+      <div><label>TO (Buyer)</label>
+        <input id="toName" value="GRANDWOODS TRADING (SINGAPORE) PTE. LTD.">
+      </div>
+      <div><label>Buyer Address</label>
+        <input id="toAddr" value="LOCATED AT 6 TEMASEK BOULEVARD #19-05 SUNTEC TOWER FOUR, SINGAPORE 038986">
+      </div>
+    </div>
+    <div class="row">
+      <div><label>INVOICE NO.</label><input id="invoiceNo" value="CI-26070010-6"></div>
+      <div><label>DATE (yyyy/mm/dd)</label><input id="date" type="date"></div>
+      <div><label>S/C NO.</label><input id="scNo" value="LWXS2026044"></div>
+      <div><label>TRUCK NO.</label><input id="truckNo" value="TCX9837"></div>
+    </div>
+    <div class="row">
+      <div><label>COMMODITY</label><input id="commodity" value="DEFORMED STEEL BAR"></div>
+      <div><label>GRADE</label><input id="grade" value="B500B"></div>
+      <div><label>TARIFF CODE</label><input id="tariff" value="7214203100"></div>
+      <div><label>LENGTH</label><input id="length" value="12M"></div>
+    </div>
+
+    <label style="margin-top:14px;font-weight:bold;color:#333;">Item Details</label>
+    <div class="item-header">
+      <span>LOT</span><span>SIZE</span><span>BUNDLES</span>
+      <span>MT</span><span>UNIT PRICE (CNY/MT)</span><span>AMOUNT (CNY)</span>
+    </div>
+    <div id="items"></div>
+    <button type="button" class="btn-add" onclick="addItem()">+ Add Item</button>
+
+    <div>
+      <button onclick="generate('invoice')">Download Invoice (PDF)</button>
+      <button onclick="generate('packing')">Download Packing List (PDF)</button>
+      <button onclick="generate('both')">Download Both (Single PDF)</button>
+    </div>
+  </div>
+
+  <!-- ================= 发票模板 ================= -->
+  <div class="doc hidden" id="invoiceDoc">
+    <div class="letterhead">
+      <div class="lh-text">
+        <div class="lh-name">ALLIANCE STEEL (M) SDN. BHD.</div>
+        <div class="lh-company-no">Company No. 1088350-M</div>
+      </div>
+    </div>
+
+    <div class="top">
+      <div>
+        <div class="issuer-label">ISSUER</div>
+        <div class="issuer-name">ALLIANCE STEEL (M) SDN. BHD.</div>
+        <div>KAWASAN INDUSTRI MALAYSIA-CHINA KUANTAN (MCKIP),<br>JALAN GEBENG BY PASS,
+        <br>26080 KUANTAN, PAHANG, MALAYSIA.</div>
+      </div>
+      <div class="title-box">
+        <div class="doc-title">COMMERCIAL INVOICE</div>
+      </div>
+    </div>
+
+    <div class="to-block">
+      <div class="issuer-label">TO</div>
+      <div id="invToName"></div>
+      <div id="invToAddr"></div>
+    </div>
+
+    <div class="grid-meta">
+      <div class="meta-line"><span class="k">INVOICE NO.:</span> <span id="invNo"></span></div>
+      <div class="meta-line"><span class="k">DATE:</span> <span id="invDate"></span></div>
+      <div class="meta-line"><span class="k">S/C NO.:</span> <span id="invScNo"></span></div>
+      <div class="meta-line"><span class="k">TRUCK NO.:</span> <span id="invTruckNo"></span></div>
+      <div class="meta-line"><span class="k">TERMS OF PAYMENT :</span> T/T</div>
+    </div>
+
+    <div class="transport">
+      <span class="k">Transport details:</span><br>
+      FROM KUANTAN PORT, MALAYSIA TO SINGAPORE BY TRUCK
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:12%;">Marks and numbers</th>
+          <th style="width:42%;">Number and kind of packages; description of goods</th>
+          <th style="width:12%;">Quantity<br>(MT)</th>
+          <th style="width:16%;">Unit price<br>(CNY/MT)</th>
+          <th style="width:18%;">Amount<br>(CNY)</th>
+        </tr>
+      </thead>
+      <tbody id="invItems"></tbody>
+    </table>
+
+    <div class="terms">PRICE TERMS: CPT BY TRUCK TO SINGAPORE</div>
+    <div class="say" id="sayAmount"></div>
+  </div>
+
+  <!-- ================= 箱单模板 ================= -->
+  <div class="doc hidden" id="packingDoc">
+    <div class="letterhead">
+      <div class="lh-text">
+        <div class="lh-name">ALLIANCE STEEL (M) SDN. BHD.</div>
+        <div class="lh-company-no">Company No. 1088350-M</div>
+      </div>
+    </div>
+
+    <div class="top">
+      <div>
+        <div class="issuer-label">Issuer</div>
+        <div class="issuer-name">ALLIANCE STEEL (M) SDN. BHD.</div>
+        <div>KAWASAN INDUSTRI MALAYSIA-CHINA KUANTAN (MCKIP),<br>JALAN GEBENG BY PASS,
+        <br>26080 KUANTAN, PAHANG, MALAYSIA.</div>
+      </div>
+      <div class="title-box">
+        <div class="doc-title">PACKING LIST</div>
+      </div>
+    </div>
+
+    <div class="to-block">
+      <div class="issuer-label">To</div>
+      <div id="plToName"></div>
+      <div id="plToAddr"></div>
+    </div>
+
+    <div class="grid-meta">
+      <div class="meta-line"><span class="k">INVOICE NO.:</span> <span id="plNo"></span></div>
+      <div class="meta-line"><span class="k">DATE:</span> <span id="plDate"></span></div>
+      <div class="meta-line"><span class="k">S/C NO.:</span> <span id="plScNo"></span></div>
+      <div class="meta-line"><span class="k">TRUCK NO.:</span> <span id="plTruckNo"></span></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:12%;">Marks and numbers</th>
+          <th style="width:34%;">Number and kind of packages; description of goods</th>
+          <th style="width:13%;">BUNDLES</th>
+          <th style="width:14%;">GROSS<br>WEIGHT (MT)</th>
+          <th style="width:14%;">NET<br>WEIGHT (MT)</th>
+        </tr>
+      </thead>
+      <tbody id="plItems"></tbody>
+    </table>
+
+    <div class="cbm-block">
+      <div><span class="k">CBM (BUNDLES)：</span><span id="plCbm"></span></div>
+      <div><span class="k">TOTAL NET WEIGHT：</span><span id="plNet"></span></div>
+      <div><span class="k">TOTAL GROSS WEIGHT：</span><span id="plGross"></span></div>
+      <div><span class="k">TOTAL NO OF BUNDLE：</span><span id="plBundles"></span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 英文金额大写 ================= */
+const ones = ['','one','two','three','four','five','six','seven','eight','nine',
+  'ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+
+function threeDigitToWords(n) {
+  let s = '';
+  if (n >= 100) {
+    s += ones[Math.floor(n/100)] + ' hundred ';
+    n %= 100;
+  }
+  if (n >= 20) {
+    s += tens[Math.floor(n/10)];
+    if (n % 10) s += '-' + ones[n % 10];
+  } else if (n > 0) {
+    s += ones[n];
+  }
+  return s.trim();
+}
+
+function numberToWords(num) {
+  if (num === 0) return 'zero';
+  const scales = ['', ' thousand', ' million', ' billion'];
+  let words = '';
+  let scaleIdx = 0;
+  let n = Math.floor(num);
+  while (n > 0) {
+    const chunk = n % 1000;
+    if (chunk) {
+      let part = threeDigitToWords(chunk);
+      words = part + scales[scaleIdx] + (words ? ' ' + words : '');
+    }
+    n = Math.floor(n / 1000);
+    scaleIdx++;
+  }
+  return words;
+}
+
+function amountToWords(amount) {
+  const intPart = Math.floor(amount);
+  const cents = Math.round((amount - intPart) * 100);
+  let words = numberToWords(intPart).toUpperCase();
+  let result = 'SAY CHINESE YUAN RENMINBI ' + words;
+  if (cents > 0) {
+    result += ' AND CENTS ' + numberToWords(cents).toUpperCase();
+  }
+  result += ' ONLY.';
+  return result;
+}
+
+/* ================= 明细行 ================= */
+function addItem(lot='', size='DIA40MM', bundles=23, mt=48.99, price=3348) {
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.innerHTML = `
+    <input class="f-lot" value="${lot}" placeholder="LOT">
+    <input class="f-size" value="${size}" placeholder="SIZE">
+    <input type="number" class="f-bundles" value="${bundles}">
+    <input type="number" step="0.01" class="f-mt" value="${mt}">
+    <input type="number" step="0.01" class="f-price" value="${price}">
+    <input class="f-amount" readonly style="background:#f5f5f5;">
+  `;
+  document.getElementById('items').appendChild(div);
+  div.querySelector('.f-mt').addEventListener('input', updateAmounts);
+  div.querySelector('.f-price').addEventListener('input', updateAmounts);
+  updateAmounts();
+}
+
+function collectItems() {
+  return [...document.querySelectorAll('.item-row')].map(r => ({
+    lot: r.querySelector('.f-lot').value,
+    size: r.querySelector('.f-size').value,
+    bundles: Number(r.querySelector('.f-bundles').value) || 0,
+    mt: Number(r.querySelector('.f-mt').value) || 0,
+    price: Number(r.querySelector('.f-price').value) || 0
+  }));
+}
+
+function updateAmounts() {
+  const items = collectItems();
+  let total = 0;
+  document.querySelectorAll('.item-row').forEach((r, i) => {
+    const amt = items[i].mt * items[i].price;
+    total += amt;
+    r.querySelector('.f-amount').value = amt.toFixed(2);
+  });
+  return total;
+}
+
+/* ================= 数据收集 ================= */
+function collect() {
+  const items = collectItems();
+  const dateVal = document.getElementById('date').value;
+  const dateStr = dateVal ? dateVal.replace(/-/g, '/') : '';
+  return {
+    toName: document.getElementById('toName').value,
+    toAddr: document.getElementById('toAddr').value,
+    invoiceNo: document.getElementById('invoiceNo').value,
+    date: dateStr,
+    scNo: document.getElementById('scNo').value,
+    truckNo: document.getElementById('truckNo').value,
+    commodity: document.getElementById('commodity').value,
+    grade: document.getElementById('grade').value,
+    tariff: document.getElementById('tariff').value,
+    length: document.getElementById('length').value,
+    items
+  };
+}
+
+/* ================= 渲染发票 ================= */
+function renderInvoice(data) {
+  document.getElementById('invToName').textContent = data.toName;
+  document.getElementById('invToAddr').textContent = data.toAddr;
+  document.getElementById('invNo').textContent = data.invoiceNo;
+  document.getElementById('invDate').textContent = data.date;
+  document.getElementById('invScNo').textContent = data.scNo;
+  document.getElementById('invTruckNo').textContent = data.truckNo;
+
+  let total = 0;
+  const rows = data.items.map(it => {
+    const amt = it.mt * it.price;
+    total += amt;
+    return `<tr>
+      <td class="center">N/M</td>
+      <td>
+        <div><b>COMMODITY:</b> ${data.commodity}</div>
+        <div><b>GRADE:</b> ${data.grade}</div>
+        <div><b>TARIFF CODE：</b>${data.tariff}</div>
+        <!-- 这里加入了 BUNDLES 显示 -->
+        <div>LOT: ${it.lot} &nbsp; SIZE: ${it.size} &nbsp; BUNDLES: ${it.bundles} &nbsp; LENGTH: ${data.length}</div>
+      </td>
+      <td class="right">${it.mt.toFixed(2)}</td>
+      <td class="right">${it.price.toFixed(2)}</td>
+      <td class="right">${amt.toFixed(2)}</td>
+    </tr>`;
+  });
+  rows.push(`<tr class="total-row">
+    <td colspan="2" class="right">TOTAL:</td>
+    <td class="right">${data.items.reduce((s,i)=>s+i.mt,0).toFixed(2)}</td>
+    <td></td>
+    <td class="right">${total.toFixed(2)}</td>
+  </tr>`);
+  document.getElementById('invItems').innerHTML = rows.join('');
+  document.getElementById('sayAmount').textContent = amountToWords(total);
+}
+
+/* ================= 渲染箱单 ================= */
+function renderPacking(data) {
+  document.getElementById('plToName').textContent = data.toName;
+  document.getElementById('plToAddr').textContent = data.toAddr;
+  document.getElementById('plNo').textContent = data.invoiceNo;
+  document.getElementById('plDate').textContent = data.date;
+  document.getElementById('plScNo').textContent = data.scNo;
+  document.getElementById('plTruckNo').textContent = data.truckNo;
+
+  let totalBundles = 0, totalMt = 0;
+  const rows = data.items.map(it => {
+    totalBundles += it.bundles;
+    totalMt += it.mt;
+    return `<tr>
+      <td class="center">N/M</td>
+      <td>
+        <div><b>COMMODITY:</b> ${data.commodity}</div>
+        <div><b>GRADE:</b> ${data.grade}</div>
+        <div><b>TARIFF CODE：</b>${data.tariff}</div>
+        <div>LOT: ${it.lot} &nbsp; SIZE: ${it.size} &nbsp; LENGTH: ${data.length}</div>
+      </td>
+      <td class="center">${it.bundles}</td>
+      <td class="right">${it.mt.toFixed(2)} MT</td>
+      <td class="right">${it.mt.toFixed(2)} MT</td>
+    </tr>`;
+  });
+  rows.push(`<tr class="total-row">
+    <td colspan="2" class="right">TOTAL:</td>
+    <td class="center">${totalBundles}</td>
+    <td class="right">${totalMt.toFixed(2)} MT</td>
+    <td class="right">${totalMt.toFixed(2)} MT</td>
+  </tr>`);
+  document.getElementById('plItems').innerHTML = rows.join('');
+
+  // CBM = 总 MT × 0.529
+  document.getElementById('plCbm').textContent = (totalMt * 0.529).toFixed(3);
+  document.getElementById('plNet').textContent = totalMt.toFixed(2) + ' MT';
+  document.getElementById('plGross').textContent = totalMt.toFixed(2) + ' MT';
+  document.getElementById('plBundles').textContent = totalBundles;
+}
+
+/* ================= 生成单个 PDF ================= */
+function downloadPdf(element, filename) {
+  const opt = {
+    margin: 0,
+    filename: filename,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+  };
+  return html2pdf().set(opt).from(element).save();
+}
+
+/* ================= 终极合并逻辑：先分别生成，再无缝拼接 ================= */
+async function mergePdfs(filename) {
+  const inv = document.getElementById('invoiceDoc');
+  const pack = document.getElementById('packingDoc');
+  
+  inv.classList.remove('hidden');
+  const invPdfBlob = await html2pdf().set({
+    margin: 0, image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+  }).from(inv).outputPdf('arraybuffer');
+  inv.classList.add('hidden');
+
+  pack.classList.remove('hidden');
+  const packPdfBlob = await html2pdf().set({
+    margin: 0, image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+  }).from(pack).outputPdf('arraybuffer');
+  pack.classList.add('hidden');
+
+  const { PDFDocument } = PDFLib;
+  const mergedPdf = await PDFDocument.create();
+
+  const pdf1 = await PDFDocument.load(invPdfBlob);
+  const pdf2 = await PDFDocument.load(packPdfBlob);
+
+  const copiedPages1 = await mergedPdf.copyPages(pdf1, pdf1.getPageIndices());
+  copiedPages1.forEach((page) => mergedPdf.addPage(page));
+
+  const copiedPages2 = await mergedPdf.copyPages(pdf2, pdf2.getPageIndices());
+  copiedPages2.forEach((page) => mergedPdf.addPage(page));
+
+  const mergedPdfBytes = await mergedPdf.save();
+
+  const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function generate(type) {
+  const data = collect();
+  updateAmounts();
+  renderInvoice(data);
+  renderPacking(data);
+
+  if (type === 'invoice') {
+    document.getElementById('invoiceDoc').classList.remove('hidden');
+    await downloadPdf(document.getElementById('invoiceDoc'), `Invoice-${data.invoiceNo}.pdf`);
+    document.getElementById('invoiceDoc').classList.add('hidden');
+  } else if (type === 'packing') {
+    document.getElementById('packingDoc').classList.remove('hidden');
+    await downloadPdf(document.getElementById('packingDoc'), `Packing-${data.invoiceNo}.pdf`);
+    document.getElementById('packingDoc').classList.add('hidden');
+  } else {
+    await mergePdfs(`Invoice-Packing-${data.invoiceNo}.pdf`);
+  }
+}
+
+/* ================= 初始化 ================= */
+addItem('1', 'DIA40MM', 23, 48.99, 3348);
+document.getElementById('date').value = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>
